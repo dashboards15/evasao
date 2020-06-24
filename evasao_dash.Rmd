@@ -1,0 +1,244 @@
+---
+title: "Evasão na Estatística"
+knit: (function(input_file, encoding) {
+  out_dir <- 'docs';
+  rmarkdown::render(input_file,
+ encoding=encoding,
+ output_file=file.path(dirname(input_file), out_dir, 'index.html'))})
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: rows
+    vertical_layout: scroll
+---
+
+```{r setup, include=FALSE}
+library(flexdashboard)
+# library(plotly)
+library(tidyverse)
+library(brazilmaps)
+library(RColorBrewer)
+library(leaflet)
+# library(gridExtra)
+library(kableExtra)
+library(GADMTools)
+# library(egg)
+library(readxl)
+evasao <- read_excel("evasao.xlsx")
+
+dados<- evasao %>%
+  group_by(STATE) %>%
+  summarise(n=n(), evasao=sum(evadido),alunos=sum(total),tx=evasao/alunos*100,tx_estado=round(tx,2)) %>% 
+  ungroup() %>% 
+  mutate(NO_IES= c("Fundação Universidade Federal de Rondônia",
+         "Universidade Federal do Amazonas",
+         "Universidade Federal do Para",
+         "Universidade Federal do Piauí",
+         "Universidade Federal do Ceara",
+         "Universidade Federal do Rio Grande do Norte",
+         paste("Universidade Estadual da Paraíba,", "<br/>",
+               "Universidade Federal da Paraíba", #"<br/>",
+               "e", "<br/>",
+               "Universidade Federal de Campina Grande"),
+         "Universidade Federal de Pernambuco",
+         "Universidade Federal de Sergipe",
+         "Universidade Federal da Bahia",
+         paste("Universidade Federal de Juiz de Fora,", "<br/>",
+               "Universidade Federal de Minas Gerais,", "<br/>",
+               "Universidade Federal de Uberlândia", #"<br/>",
+               "e", "<br/>",
+               "Universidade Federal de Ouro Preto"),
+         "Universidade Federal do Espirito Santo",
+         paste("Universidade Federal do Rio de Janeiro,", "<br/>",
+               "Universidade do Estado do Rio de Janeiro,", "<br/>",
+               "Universidade Federal Fluminense",# "<br/>",
+               "e", "<br/>",
+               "Escola Nacional de Ciências Estatísticas"), 
+         paste("Universidade de São Paulo,", "<br/>",
+               "Universidade Estadual Paulista Júlio de Mesquita Filho,", "<br/>",
+               "Universidade Estadual de Campinas,", "<br/>",
+               "Centro Universitário Capital", #"<br/>",
+               "e", "<br/>",
+               "Universidade Federal de São Carlos"),
+         paste("Universidade Federal do Parana", #"<br/>",
+               "e", "<br/>",
+               "Universidade Estadual de Maringá"),
+         paste("Universidade Federal do Rio Grande do Sul", #"<br/>",
+               "e", "<br/>",
+               "Universidade Federal de Santa Maria"),
+         "Universidade Federal de Mato Grosso",
+         "Universidade Federal de Goiás",
+         "Universidade De Brasília")
+)
+
+dados<- get_brmap("State") %>%  
+  left_join(dados, c("State" = "STATE")) %>% 
+  replace_na(list(n=0,alunos=0,tx_estado="Não possui curso")) 
+my_orange = brewer.pal(n = 9, "YlOrRd")
+
+```
+
+Cursos
+=======================================================================
+
+Row
+-----------------------------------------------------------------------
+
+### alunos ingressaram entre 2009 e 2014
+
+```{r}
+valueBox(value = sum(evasao$total),
+         color = my_orange[4]
+         #icon = "glyphicon-ok"
+         )
+```
+
+### cursando ou com matrícula trancada (em 2017)
+
+```{r}
+valueBox(value = sum(evasao$cursando)+sum(evasao$trancado),
+         color = my_orange[5],
+         icon = "fa-pencil"
+         )
+```
+
+
+### formaram-se até 2017
+
+```{r}
+valueBox(value = sum(evasao$formado),
+         color = my_orange[6],
+         icon="fa-thumbs-up"
+         )
+```
+
+
+### evadiram entre 2009 e 2017
+
+```{r}
+#usar o dconfirmed pq o dados remove
+valueBox(value = sum(evasao$evadido),
+         color = my_orange[7],
+         icon="fa-thumbs-down"
+         )
+```
+
+
+
+Row
+-----------------------------------------------------------------------
+
+### Instituições de Ensino Superior (IES) com cursos de Estatística por Unidade da Federação
+
+```{r}
+pal.state <- colorFactor(palette = my_orange[c(3,5,6,7,8,9)], domain = dados$n)
+mytext<- paste(
+  dados$nome,"<br/>", 
+  "Quantidade de IES: ", dados$n, "<br/>", 
+  "Taxa de evasão no estado (%): ",dados$tx_estado, "<br/>",
+  "Nome(s) IES: ", dados$NO_IES,
+  sep="") %>%
+  lapply(htmltools::HTML)
+
+m<-leaflet(dados) %>% 
+  addTiles() %>% 
+  # setView( lat=-30.5, lng=-53 , zoom=6) %>%
+  addPolygons(color = "#444444", weight = .05, smoothFactor = 0.5,
+              opacity = 1.0, fillOpacity = 0.5,
+              fillColor =  ~pal.state(n),
+              label = mytext,
+              highlightOptions = highlightOptions(color = "white", weight = 2, bringToFront = TRUE)
+  ) %>%
+  addLegend("bottomright",
+            pal = pal.state,
+            values = ~n,
+            title = "Quantidade de IES",
+            opacity = 1
+  )
+m
+```
+
+### Taxas de evasão por por Unidade da Federação
+
+```{r}
+pal.state <- colorBin(palette = my_orange[4:9], domain = dados$tx,na.color = my_orange[1],bins=4)
+
+mytext<- paste(
+  dados$nome,"<br/>",
+  "Taxa de evasão no estado (%): ",dados$tx_estado, "<br/>",
+  "Quantidade de IES: ", dados$n, "<br/>", 
+  sep="") %>%
+  lapply(htmltools::HTML)
+
+m<-leaflet(dados) %>% 
+  addTiles() %>% 
+  addPolygons(color = "#444444", weight = .05, smoothFactor = 0.5,
+              opacity = 1.0, fillOpacity = 0.5,
+              fillColor =  ~pal.state(tx),
+              label = mytext,
+              highlightOptions = highlightOptions(color = "white", weight = 2, bringToFront = TRUE)
+  ) %>%
+  addLegend("bottomright",
+            pal = pal.state,
+            values = ~tx,
+            title = "Taxas de evasão (%)",
+            na.label = "Não possui curso",
+            opacity = 1
+  )
+m
+```
+
+Row
+-----------------------------------------------------------------------
+
+### Taxas de evasão
+```{r}
+taxas<- evasao %>%
+  mutate(Ranking = 1:33,
+         Evasão = round(evadido/total*100,2),
+         Formação = round(formado/total*100,2),
+         Censura = round((cursando+trancado)/total*100,2)
+         ) %>%
+  select(Ranking,IES,Evasão, Formação, Censura)
+
+kable(taxas, align = "c",
+      caption = "Taxas de evasão, formação e censura entre os discentes de cursos de Estatística de acordo com a Instituição de Ensino Superior e em ordem crescente de evasão (%).",
+      col.names = c("Ranking","Instituição de Ensino Superior","Evasão", "Formação", "Cursando ou trancado")) %>%
+  kable_styling(c("striped"), full_width = F)
+```
+
+### Quantidade de discentes
+```{r}
+QT <- evasao %>%
+  mutate(Censura = (cursando+trancado)) %>%
+  select(IES,evadido, formado, Censura, total)
+
+kable(QT, align = "c",
+      caption = "Quantidade de discentes de Estatística de acordo com a Instituição de Ensino Superior e a  situação no final do estudo.",
+      col.names = c("Instituição de Ensino Superior","Evasão", "Formação", "Cursando ou trancado", "Total")) %>%
+  kable_styling(c("striped"), full_width = F)
+```
+
+
+Sobre
+=======================================================================
+
+
+**O aplicativo**
+
+O objetivo deste aplicativo é facilitar a visualização da distribuição geográfica das taxas de evasão nos cursos de Estatística, considerando ingressos entre 2009 e 2014. São apresentados mapas interativos contendo informações sobre a quantidade de Instituições de Ensino Superior e taxas de evasão por Unidade da Federação. Além disso, é disponibilizada a relação completa das instituições que ofertam os referidos cursos e um ranking em ordem crescente de evasão. Este aplicativo é um dos resultados do artigo intitulado ''Modelos de statistical learning para previsão da evasão nos cursos superiores em estatística no Brasil'', o qual está submetido na revista Gestão & Produção - ISSN: 0104-530X (Print) e 1806-9649 (Online).
+
+
+**Origem dos dados**
+
+Os dados são provenientes do Censo da Educação Superior que é realizado anualmente pelo Instituto Nacional de Estudos e Pesquisas Educacionais Anísio Teixeira e estão disponíveis em http://portal.inep.gov.br/basica-levantamentos-acessar. Definiu-se como público-alvo os discentes que ingressaram entre 2009 e 2014 em cursos de Estatística então vigentes no Brasil. Os alunos foram acompanhados nos Censos subsequentes até o ano de 2017, ou até que apresentassem as seguintes situações:
+
+1) Evadido:  discentes cujo último registro consta em situação “desvinculado do curso” ou “transferido para outro curso da mesma IES”. 
+
+2) Formado: discentes que concluíram a graduação. 
+
+3) Cursando ou trancado: discentes cujo último registro consta em situação "matrícula trancada"", "provável formando" ou "cursando".
+
+
+
+O acompanhamento foi realizado por meio do código de identificação único gerado pelo INEP, que é disponibilizado no banco de dados do Censo. Um maior detalhamento sobre o processamento dos dados é descrito no artigo.
+
